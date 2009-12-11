@@ -2,6 +2,11 @@
 This example looks for any vessels that are acquired through SeattleGENI
 which are unusable/offline/unreachable. It then releases those vessels
 and acquires new ones.
+
+This script assumes that all nodelocations advertised under a user's key
+(that is, the user's identity) are for nodes that were obtained through
+SeattleGENI. This will be the case if you are not running your own,
+private Seattle testbed.
 """
 
 import sys
@@ -30,10 +35,11 @@ PUBLICKEY_FILENAME = "/path/to/your.publickey"
 PRIVATEKEY_FILENAME = "/path/to/your.privatekey"
 
 # Any number of usable vessels less than this number will result in trying to
-# acquire the number of vessels required to reach this number.
+# acquire a total of this number of vessels up to the maximum number of vessels
+# that SeattleGENI will allow the account to acquire. (To increase the maximum
+# number of vessels SeattleGENI will let your account have, you need to donate
+# more resources.)
 MIN_VESSELS_TO_KEEP = 4
-# Any number greater than the max allowed for this seattlegeni account will mean
-MAX_VESSELS_TO_KEEP = 6
 
 
 
@@ -95,13 +101,12 @@ def main():
     print("max_vessels_allowed: " + str(max_vessels_allowed)) 
     
     # Determine the number of vessels we already have acquired through seattlegeni.
-    currently_acquired_count = len(experimentlib.seattlegeni_get_acquired_vessels(identity))
-    print("currently_acquired_count: " + str(currently_acquired_count))    
+    num_currently_acquired = len(experimentlib.seattlegeni_get_acquired_vessels(identity))
+    print("currently_acquired_count: " + str(num_currently_acquired))    
 
-    # Let's try to get as close to MAX_VESSELS_TO_KEEP without requesting more
+    # Let's try to get as close to MIN_VESSELS_TO_KEEP without requesting more
     # than is allowed by this account.
-    actual_max_vessels = min(max_vessels_allowed, MAX_VESSELS_TO_KEEP)
-    num_vessels_to_request = actual_max_vessels - currently_acquired_count
+    num_vessels_to_request = min(max_vessels_allowed, MIN_VESSELS_TO_KEEP) - num_currently_acquired
 
     if num_vessels_to_request <= 0:
       print("This account doesn't have enough vessel credits to request more vessels.")

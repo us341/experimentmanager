@@ -39,6 +39,11 @@
 
   For examples of using this experimentlib, see the examples/ directory.
 
+  Please also see the following wiki page for usage information and how to
+  obtain the latest version of this experiment library:
+  
+    https://seattle.cs.washington.edu/wiki/ExperimentLibrary
+
 <Notes>
 
   Object Definitions:
@@ -156,13 +161,23 @@ SEATTLEGENI_VESSEL_TYPE_NAT = "nat"
 SEATTLEGENI_VESSEL_TYPE_RAND = "rand"
 
 # TODO: Are there any other status actually used? nmstatusmonitory.py shows
-# that ThreadErr and Stale may be possibilities. How about others?
+# that ThreadErr and Stale may be possibilities. How about others? Also,
+# we should describe what these mean. For example, what's the difference
+# between stopped and terminated?
 VESSEL_STATUS_FRESH = "Fresh"
 VESSEL_STATUS_STARTED = "Started"
 VESSEL_STATUS_STOPPED = "Stopped"
 VESSEL_STATUS_TERMINATED = "Terminated"
+
+# The node is not advertising
 VESSEL_STATUS_NO_SUCH_NODE = "NO_SUCH_NODE"
+
+# The node can be communicated with but the specified vessel doesn't exist
+# on the node. This will also be used when the vessel exists on the node but
+# the identity being used is not a user or the owner of the vessel.
 VESSEL_STATUS_NO_SUCH_VESSEL = "NO_SUCH_VESSEL"
+
+# The node can't be communicated with or communication fails.
 VESSEL_STATUS_NODE_UNREACHABLE = "NODE_UNREACHABLE"
 
 # For convenience we define two sets of vessel status constants that include
@@ -229,6 +244,23 @@ class NodeLocationLookupError(SeattleExperimentError):
   """
   Unable to determine the location of a node based on its nodeid or unable
   to successfully perform an advertisement lookup.
+  """
+  
+  
+
+class NodeLocationNotAdvertisedError(NodeLocationLookupError):
+  """
+  A lookup was successful but no node locations are being advertised under a
+  nodeid.
+  """
+  
+  
+
+class UnableToPerformLookupError(NodeLocationLookupError):
+  """
+  Something is wrong with performing lookups. Either none of the lookup
+  services that were tried were successful or there's a bug in some underlying
+  code being used by this module.
   """
 
 
@@ -574,8 +606,8 @@ def _lookup_node_locations(keystring, lookuptype=None):
     else:
       nodelist = advertise_lookup(keydict, maxvals=max_lookup_results, timeout=defaulttimeout)
   except AdvertiseError, e:
-    raise NodeLocationLookupError("Failure when trying to perform advertise lookup: " + 
-                                  traceback.format_exc())
+    raise UnableToPerformLookupError("Failure when trying to perform advertise lookup: " + 
+                                     traceback.format_exc())
 
   # If there are no vessels for a user, the lookup may return ''.
   for nodename in nodelist[:]:
@@ -597,7 +629,7 @@ def lookup_node_locations_by_identity(identity):
     identity
       The identity whose public key should be used to lookup nodelocations.
   <Exceptions>
-    NodeLocationLookupError
+    UnableToPerformLookupError
       If a failure occurs when trying lookup advertised node locations.
   <Returns>
     A list of nodelocations.
@@ -619,7 +651,7 @@ def lookup_node_locations_by_nodeid(nodeid):
     nodeid
       The nodeid of the node whose advertised locations are to be looked up.
   <Exceptions>
-    NodeLocationLookupError
+    UnableToPerformLookupError
       If a failure occurs when trying lookup advertised node locations.
   <Returns>
     A list of nodelocations.
@@ -788,7 +820,10 @@ def _check_vessel_status_change(vesselhandle, monitordict):
     if old_data['status'] != new_data['status']:
       try:
         # TODO: make sure that exception's from the user's code end up
-        # somewhere where the user has access to them.
+        # somewhere where the user has access to them. For now, we leave it to
+        # the user to make sure they handle exceptions rather than let them
+        # escape their callback and this is documented in the docstring of
+        # the function register_vessel_status_monitor.
         monitordict['callback'](vesselhandle, old_data['status'], new_data['status'])
       
       except Exception:
@@ -838,7 +873,9 @@ def register_vessel_status_monitor(identity, vesselhandle_list, callback, waitti
     callback
       The callback function. This should accept three arguments:
         (vesselhandle, oldstatus, newstatus)
-      where oldstatus and newstatus are both strings.
+      where oldstatus and newstatus are both strings. Any exceptions raised by
+      the callback will be silently ignored, so the callback should implement
+      exception handling.
     waittime
       How many seconds to wait between status checks. This will be the time
       between finishing a check of all vessels and starting another round of
@@ -867,7 +904,12 @@ def register_vessel_status_monitor(identity, vesselhandle_list, callback, waitti
       if id not in _vessel_monitors:
         break
     else:
-      raise Exception("Can't generate a unique vessel monitor id.")
+      # I don't intend users to need to worry about this exception. I also
+      # don't know of a more specific built-in exception to use and I don't
+      # feel this should raise a SeattleExperimentException. Therefore,
+      # intentionally raising a generic Exception here.
+      raise Exception("Can't generate a unique vessel monitor id. " + 
+                      "This probably means a bug in experimentlib.py")
     _vessel_monitors[id] = {}
     
     _vessel_monitors[id]['vesselhandle_list'] = vesselhandle_list
@@ -1016,21 +1058,18 @@ def get_vessel_status(vesselhandle, identity):
   try:
     # This will get a cached node location if one exists.
     nodelocation = get_node_location(nodeid)
-  except NodeLocationLookupError, e:
+  except NodeLocationNotAdvertisedError, e:
     # If we can't find the node, then it must not be advertising.
     _debug_print("get_vessel_status cannot determine location of node: " + str(e))
     return VESSEL_STATUS_NO_SUCH_NODE
   
   try:
-    # TODO: we need to also detect whether the vessel no longer belongs to the
-    # user. Shouldn't browse_node take care of this by only returning vessels
-    # that this identity is the owner or a user of?
     vesselinfolist = browse_node(nodelocation, identity)
   except NodeCommunicationError:
     # Do a non-cache lookup of the nodeid to see if the node moved.
     try:
       nodelocation = get_node_location(nodeid, ignorecache=True)
-    except NodeLocationLookupError, e:
+    except NodeLocationNotAdvertisedError, e:
       return VESSEL_STATUS_NO_SUCH_NODE
 
     # Try to communicate again.
@@ -1092,28 +1131,50 @@ def get_offcut_resources(nodeid):
   <Purpose>
     Obtain information about offcut resources on a node.
   <Arguments>
+    nodeid
+      The nodeid of the node whose offcut resources are to be queried.
   <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
   <Side Effects>
+    None
   <Returns>
     A string containing information about the node's offcut resources.
   """
+  # TODO: This function might be more useful to process the string returned
+  # by the nodemanager and return it from this function as some well-defined
+  # data structure.
   return _do_public_node_request(nodeid, "GetOffcutResources")
   
 
 
 
 
-def get_restrictions_info(nodeid):
+def get_restrictions_info(vesselhandle):
   """
   <Purpose>
     Obtain vessel resource/restrictions information.
   <Arguments>
+    vesselhandle
+      The vesselhandle of the vessels whose restrictions/resources info are to
+      be returned.
   <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
   <Side Effects>
+    None
   <Returns>
     A string containing the vessel resource/restrictions information.
   """
-  return _do_public_node_request(nodeid, "GetVesselResources")
+  # TODO: This function might be more useful to process the string returned
+  # by the nodemanager and return it from this function as some well-defined
+  # data structure.
+  nodeid, vesselname = get_nodeid_and_vesselname(vesselhandle)
+  return _do_public_node_request(nodeid, "GetVesselResources", vesselhandle)
   
 
 
@@ -1124,8 +1185,17 @@ def get_log(vesselhandle, identity):
   <Purpose>
     Read the vessel log.
   <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel whose log is to be read.
+    identity
+      The identity of either the owner or a user of the vessel.
   <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
   <Side Effects>
+    None
   <Returns>
     A string containing the data in the vessel log.
   """
@@ -1140,8 +1210,17 @@ def get_file_list(vesselhandle, identity):
   <Purpose>
     Get a list of files that are on the vessel.
   <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel whose file list is to be obtained.
+    identity
+      The identity of either the owner or a user of the vessel.
   <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
   <Side Effects>
+    None
   <Returns>
     A list of filenames (strings).
   """
@@ -1158,8 +1237,12 @@ def upload_file(vesselhandle, identity, local_filename, remote_filename=None):
     Upload a file to a vessel.
   <Arguments>
     vesselhandle
+      The vesselhandle of the vessel that the file is to be uploaded to.
     identity
+      The identity of either the owner or a user of the vessel.
     local_filename
+      The name of the local file to be uploaded. That can include a directory
+      path.
     remote_filename
       (optional) The filename to use when storing the file on the vessel. If
       not provided, this will be the same as the basename of local_filename.
@@ -1167,11 +1250,14 @@ def upload_file(vesselhandle, identity, local_filename, remote_filename=None):
       on all vessels.
       TODO: describe the filename restrictions.
   <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
   <Side Effects>
+    The file has been uploaded to the vessel.
   <Returns>
-    The full filename where this file was ultimately saved to. This will be in
-    the current working directory unless local_filename_prefix included a path
-    to a different directory.
+    None
   """
   _validate_vesselhandle(vesselhandle)
   
@@ -1195,8 +1281,11 @@ def download_file(vesselhandle, identity, remote_filename, local_filename=None,
     Download a file from a vessel.
   <Arguments>
     vesselhandle
+      The vesselhandle of the vessel that the file is to be downloaded from.
     identity
+      The identity of either the owner or a user of the vessel.
     remote_filename
+      The file to be downloaded.
     local_filename
       (optional) The filename to use when saving the downloaded file locally.
       This can include a directory path.
@@ -1207,7 +1296,13 @@ def download_file(vesselhandle, identity, remote_filename, local_filename=None,
       (optional) If True, the downloaded file will not be saved locally and
       instead will be returned as a string instead of the local filename.
   <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
   <Side Effects>
+    The file has been downloaded and, if return_file_contents is False, it has
+    been saved to the local filesystem.
   <Returns>
     If return_file_contents is False:
       The full filename where this file was ultimately saved to. This will be in
@@ -1245,6 +1340,22 @@ def delete_file(vesselhandle, identity, filename):
   """
   <Purpose>
     Delete a file from a vessel.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel that the file is to be deleted from.
+    identity
+      The identity of either the owner or a user of the vessel.
+    filename
+      The name of the file to be deleted from the vessel.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    The file has been deleted from the vessel.
+  <Returns>
+    None
  """
   _validate_vesselhandle(vesselhandle)
   _do_signed_vessel_request(identity, vesselhandle, "DeleteFileInVessel", filename)
@@ -1258,6 +1369,21 @@ def reset_vessel(vesselhandle, identity):
   <Purpose>
     Stop the vessel if it is running and reset it to a fresh state. This will
     delete all files from the vessel.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel that is to be reset.
+    identity
+      The identity of either the owner or a user of the vessel.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    The vessel has been reset. No program is running, no files exist on the
+    vessel, and the vessel status is VESSEL_STATUS_FRESH.
+  <Returns>
+    None
   """
   _validate_vesselhandle(vesselhandle)
   _do_signed_vessel_request(identity, vesselhandle, "ResetVessel")
@@ -1266,10 +1392,30 @@ def reset_vessel(vesselhandle, identity):
 
 
 
-def start_vessel(vesselhandle, identity, program_file, arg_list):
+def start_vessel(vesselhandle, identity, program_file, arg_list=[]):
   """
   <Purpose>
     Start a program running on a vessel.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel that is to be started.
+    identity
+      The identity of either the owner or a user of the vessel.
+    program_file
+      The name of the file that already exists on the vessel that is to be
+      run on the vessel.
+    arg_list
+      (optional) A list of arguments to be passed to the program when it is
+      started.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    The vessel has been started, running the specified program.
+  <Returns>
+    None
   """
   _validate_vesselhandle(vesselhandle)
   arg_list.insert(0, program_file)
@@ -1285,6 +1431,22 @@ def stop_vessel(vesselhandle, identity):
   """
   <Purpose>
     Stop the currently running program on a vessel, if there is one.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel that is to be stopped.
+    identity
+      The identity of either the owner or a user of the vessel.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    If a program was running on the vessel, it has been stopped. The vessel
+    state is either VESSEL_STATUS_STOPPED or VESSEL_STATUS_TERMINATED.
+    TODO: verify this is the case and describe when these will happen.
+  <Returns>
+    None
   """
   _validate_vesselhandle(vesselhandle)
   _do_signed_vessel_request(identity, vesselhandle, "StopVessel")
@@ -1293,7 +1455,7 @@ def stop_vessel(vesselhandle, identity):
 
   
   
-def split_vessel(identity, vesselhandle, resourcedata):
+def split_vessel(vesselhandle, identity, resourcedata):
   """
   <Purpose>
     Split a vessel into two new vessels.
@@ -1301,9 +1463,32 @@ def split_vessel(identity, vesselhandle, resourcedata):
     THIS OPERATION IS ONLY AVAILABLE TO THE OWNER OF THE VESSEL.
     If you have acquired the vessel through SeattleGENI, you are a user of the
     vessel, not an owner.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel that is to be split.
+    identity
+      The identity of the owner of the vessel.
+    resourcedata
+      The resourcedata that describes one of the vessels to be split from the
+      original. The other vessel will have the remainder of the resources
+      minus some overhead from the split.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    The original vessel no longer exists (meaning that the vesselhandle passed
+    in as an argument is no longer valid). The node instead has two new vessels.
+  <Returns>
+    A tuple of the two new vesselhandles that resulted from the split. The
+    first element of the tuple is the vesselhandle of the vessel that has the
+    leftover resources from the split. The second element of the tuple is the
+    vesselhandle of the vessel that has the exact resources specified in the
+    resourcedata.
   """
   _validate_vesselhandle(vesselhandle)
-  _do_signed_vessel_request(identity, vesselhandle, "SplitVessel", resourcedata)
+  return _do_signed_vessel_request(identity, vesselhandle, "SplitVessel", resourcedata)
 
 
 
@@ -1317,11 +1502,30 @@ def combine_vessels(identity, vesselhandle1, vesselhandle2):
     THIS OPERATION IS ONLY AVAILABLE TO THE OWNER OF THE VESSEL.
     If you have acquired the vessel through SeattleGENI, you are a user of the
     vessel, not an owner.
+  <Arguments>
+    identity
+      The identity of the owner of the vessel.
+    vesselhandle1
+      The vesselhandle of the one of the vessels to be comined.
+    vesselhandle2
+      The vesselhandle of the the other vessel to be combined.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    Neither of the original two vessel exist (meaning that neither vesselhandle1
+    nor vesselhandle2 are valid anymore). The node has one new vessel whose
+    resources are the combination of the resource of the original two vessels
+    plus some additional resources because of less overhead from less splits.
+  <Returns>
+    The vesselhandle of the newly created vessel.
   """
   _validate_vesselhandle(vesselhandle1)
   _validate_vesselhandle(vesselhandle2)
   vesselname2 = vesselhandle2.split(":")[1]
-  _do_signed_vessel_request(identity, vesselhandle1, "JoinVessels", vesselname2)
+  return _do_signed_vessel_request(identity, vesselhandle1, "JoinVessels", vesselname2)
 
 
 
@@ -1335,6 +1539,24 @@ def set_vessel_owner(vesselhandle, identity, new_owner_identity):
     THIS OPERATION IS ONLY AVAILABLE TO THE OWNER OF THE VESSEL.
     If you have acquired the vessel through SeattleGENI, you are a user of the
     vessel, not an owner.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel whose owner is to be changed.
+    identity
+      The identity of the current owner of the vessel. This identity must have
+      a private key.
+    new_owner_identity
+      The identity that the owner of the vessel is to be changed to. This
+      identity only needs to have a public key.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    The owner of the vessel has been changed.
+  <Returns>
+    None
   """
   _validate_vesselhandle(vesselhandle)
   _do_signed_vessel_request(identity, vesselhandle, "ChangeOwner", new_owner_identity['publickey_str'])
@@ -1351,6 +1573,22 @@ def set_vessel_advertise(vesselhandle, identity, advertise_enabled):
     THIS OPERATION IS ONLY AVAILABLE TO THE OWNER OF THE VESSEL.
     If you have acquired the vessel through SeattleGENI, you are a user of the
     vessel, not an owner.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel whose advertise status is to be set.
+    identity
+      The identity of the owner of the vessel.
+    advertise_enabled
+      True if the vessel should be advertising, False if it should not be.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    The vessel either will be advertising or will not be.
+  <Returns>
+    None
   """
   _validate_vesselhandle(vesselhandle)
   
@@ -1371,6 +1609,22 @@ def set_vessel_ownerinfo(vesselhandle, identity, ownerinfo):
     THIS OPERATION IS ONLY AVAILABLE TO THE OWNER OF THE VESSEL.
     If you have acquired the vessel through SeattleGENI, you are a user of the
     vessel, not an owner.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel whose advertise status is to be set.
+    identity
+      The identity of the owner of the vessel.
+    ownerinfo
+      The ownerinfo to be set on the vessel.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    The ownerinfo of the vessel has been set.
+  <Returns>
+    None
   """
   _validate_vesselhandle(vesselhandle)
   _do_signed_vessel_request(identity, vesselhandle, "ChangeOwnerInformation", ownerinfo)
@@ -1389,13 +1643,26 @@ def set_vessel_users(vesselhandle, identity, userkeystringlist):
     vessel, not an owner.
   <Arguments>
     vesselhandle
+      The vesselhandle of the vessel whose users are to be set.
     identity
+      The identity of the owner of the vessel.
     userkeystringlist
       A list of key strings. The key strings must be in the format of the data
       stored in key files. That is, each should be a string that consists of
       the modulus, followed by a space, followed by the public exponent.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    The user keys in userkeystringlist are the only users of the vessel.
+  <Returns>
+    None
   """
   _validate_vesselhandle(vesselhandle)
+  # TODO: Arguably the argument should be a list of identities rather than a
+  # list of key strings.
   formatteduserkeys = '|'.join(userkeystringlist)
   _do_signed_vessel_request(identity, vesselhandle, "ChangeUsers", formatteduserkeys)
   
@@ -1407,6 +1674,16 @@ def get_nodeid_and_vesselname(vesselhandle):
   """
   <Purpose>
     Given a vesselhandle, returns the nodeid and vesselname.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel whose nodeid and vesselname are to be
+      returned.
+  <Exceptions>
+    None
+  <Side Effects>
+    None
+  <Returns>
+    A tuple of (nodeid, vesselname)
   """
   _validate_vesselhandle(vesselhandle)
   return vesselhandle.split(":")
@@ -1418,8 +1695,17 @@ def get_nodeid_and_vesselname(vesselhandle):
 def get_host_and_port(nodelocation):
   """
   <Purpose>
-    Given a nodelocation, returns a (string) host and (integer) port. The host
-    may be an IP address or an identifier used by NAT forwarders.
+    Given a nodelocation, returns the host and port of the node. 
+  <Arguments>
+    nodelocation
+      The nodelocation of the node whose host and port are to be returned.
+  <Exceptions>
+    None
+  <Side Effects>
+    None
+  <Returns>
+    A tuple of (host, port), where host is a string and port is an int.
+    The host may be an IP address or an identifier used by NAT forwarders.
   """
   _validate_nodelocation(nodelocation)
   host, portstr = nodelocation.split(":")
@@ -1442,7 +1728,10 @@ def get_node_location(nodeid, ignorecache=False):
       attempting to contact potential nodelocations.
   <Exceptions>
     NodeLocationLookupError
-      If the location of the node with nodeid cannot be determined.
+      If no node locations are being advertised under the nodeid or if a
+    NodeCommunicationError
+      If multiple node locations are being advertised under the nodeid but
+      successful communication cannot be performed with any of the locations.
   <Side Effects>
     If the node location isn't already known (or if ignorecache is True),
     then an advertise lookup of the nodeid is done. In that case, if
@@ -1450,7 +1739,9 @@ def get_node_location(nodeid, ignorecache=False):
     will be contacted until one is determined to be a valid nodelocation
     that can be communicated with.
   <Returns>
-    A nodelocation.
+    A nodelocation. This nodelocation may or may not have been communicated
+    with and is instead only the most likely location of a node at the time
+    this function was called.
   """
   if ignorecache or nodeid not in _node_location_cache:
     locationlist = lookup_node_locations_by_nodeid(nodeid)
@@ -1474,8 +1765,8 @@ def get_node_location(nodeid, ignorecache=False):
           _node_location_cache[nodeid] = possiblelocation
           break
       else:
-        raise NodeLocationLookupError("Multiple node locations advertised but none " + 
-                                      "can be communicated with: " + str(locationlist))
+        raise NodeCommunicationError("Multiple node locations advertised but none " + 
+                                     "can be communicated with: " + str(locationlist))
     else:
       _node_location_cache[nodeid] = locationlist[0]
       

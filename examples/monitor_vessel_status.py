@@ -13,6 +13,7 @@ key will be monitored.
 
 import sys
 import time
+import traceback
 
 # If this script resides outside of the directory that contains the seattlelib
 # files and experimentlib.py, then you'll need to set that path here. If you
@@ -59,7 +60,7 @@ def get_node_location_or_unknown(vesselhandle):
   nodeid, vesselname = experimentlib.get_nodeid_and_vesselname(vesselhandle)
   try:
     return experimentlib.get_node_location(nodeid)
-  except experimentlib.NodeLocationError, e:
+  except experimentlib.NodeLocationNotAdvertisedError, e:
     print(str(e))
     return "Unknown"
 
@@ -72,23 +73,26 @@ def vessel_status_callback(vesselhandle, oldstatus, newstatus):
   This is the callback function will which be called by the vessel status
   monitor anytime a vessel's status changes.
   """
-  if newstatus in experimentlib.VESSEL_STATUS_SET_ACTIVE:
-    if vesselhandle not in current_vessels:
-      current_vessels.append(vesselhandle)
-  else:
-    if vesselhandle in current_vessels:
-      current_vessels.remove(vesselhandle)
-
-  nodelocation = get_node_location_or_unknown(vesselhandle)
-
-  print("vessel: ..." + str(vesselhandle)[-20:] + " @ " + nodelocation +
-        " / old status: " + oldstatus + " / new status: " + newstatus)
-
-  print("Currently active vessels:")
-  for i in range(len(current_vessels)):
-    nodelocation = get_node_location_or_unknown(current_vessels[i])
-    print("    " + str(i + 1) + ") ..." + str(current_vessels[i])[-20:] + " @ " + nodelocation)
-
+  try:
+    if newstatus in experimentlib.VESSEL_STATUS_SET_ACTIVE:
+      if vesselhandle not in current_vessels:
+        current_vessels.append(vesselhandle)
+    else:
+      if vesselhandle in current_vessels:
+        current_vessels.remove(vesselhandle)
+  
+    nodelocation = get_node_location_or_unknown(vesselhandle)
+  
+    print("vessel: ..." + str(vesselhandle)[-20:] + " @ " + nodelocation +
+          " / old status: " + oldstatus + " / new status: " + newstatus)
+  
+    print("Currently active vessels:")
+    for i in range(len(current_vessels)):
+      nodelocation = get_node_location_or_unknown(current_vessels[i])
+      print("    " + str(i + 1) + ") ..." + str(current_vessels[i])[-20:] + " @ " + nodelocation)
+      
+  except:
+    traceback.print_exc()
 
 
 
