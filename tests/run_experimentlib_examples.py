@@ -134,3 +134,10 @@ def test_monitor_vessel_status():
   test.LOOKUP_SLEEP_SECONDS = LOOKUP_SLEEP_SECONDS
   test.MONITOR_SLEEP_SECONDS = MONITOR_SLEEP_SECONDS
   test.main()
+
+
+
+if __name__ == "__main__":
+  print("This module is not yet meant to be run as a script. For now, just " +
+        "import it and call the functions individually")
+  sys.exit(1)
