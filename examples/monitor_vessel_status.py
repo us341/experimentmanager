@@ -24,6 +24,7 @@ import traceback
 #sys.path.append(PATH_TO_SEATTLE_REPY)
 
 import experimentlib
+import vesselstatusmonitor
 
 PUBLICKEY_FILENAME = "user.publickey"
 # The private key isn't needed for just the status monitor.
@@ -118,11 +119,11 @@ def main():
     # just add the vesselhandles to the existing monitor. Adding the vesselhandles
     # will not remove the old one and duplicates will be ignored.
     if monitorhandle is None:
-      monitorhandle = experimentlib.register_vessel_status_monitor(identity, vesselhandle_list, vessel_status_callback,
-                                                                   waittime=MONITOR_SLEEP_SECONDS)
+      monitorhandle = vesselstatusmonitor.register_vessel_status_monitor(identity, vesselhandle_list, vessel_status_callback,
+                                                                         waittime=MONITOR_SLEEP_SECONDS)
       print("Vessel status monitor registered.")
     else:
-      experimentlib.add_to_vessel_status_monitor(monitorhandle, vesselhandle_list)  
+      vesselstatusmonitor.add_to_vessel_status_monitor(monitorhandle, vesselhandle_list)  
 
     time.sleep(LOOKUP_SLEEP_SECONDS)
 

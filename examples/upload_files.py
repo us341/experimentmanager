@@ -48,7 +48,7 @@ def main():
       nodelocation = experimentlib.get_node_location(nodeid)
       
       for local_filename in FILES_TO_UPLOAD:
-        experimentlib.upload_file(vesselhandle, identity, local_filename)
+        experimentlib.upload_file_to_vessel(vesselhandle, identity, local_filename)
         print("Uploaded " + local_filename + " to " + nodelocation + " vessel " + vesselname)
       
     except experimentlib.SeattleExperimentError, e:

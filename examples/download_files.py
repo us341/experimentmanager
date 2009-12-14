@@ -55,7 +55,7 @@ def main():
         os.mkdir(vessel_directory)
         
       # Get a list of files on the vessel.
-      filelist = experimentlib.get_file_list(vesselhandle, identity)
+      filelist = experimentlib.get_vessel_file_list(vesselhandle, identity)
       
       print("Files on " + nodelocation + " " + vesselname + ": " + str(filelist))
       

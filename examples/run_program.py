@@ -24,7 +24,7 @@ PROGRAM_FILE = "myprogram.repy"
 
 # A list of the additional arguments to use when start the program on each
 # vessel. This can be an empty list if no arguments are needed.
-ARGUMENT_TO_START_PROGRAM_WITH = []
+ARGUMENTS_TO_START_PROGRAM_WITH = []
 
 
 
@@ -52,10 +52,10 @@ def main():
   
       # Note: you may want to reset_vessel().
       
-      experimentlib.upload_file(vesselhandle, identity, PROGRAM_FILE)
+      experimentlib.upload_file_to_vessel(vesselhandle, identity, PROGRAM_FILE)
       print("Uploaded " + PROGRAM_FILE + " to " + nodelocation + " vessel " + vesselname)
           
-      experimentlib.start_vessel(vesselhandle, identity, PROGRAM_FILE, ARGUMENT_TO_START_PROGRAM_WITH)
+      experimentlib.start_vessel(vesselhandle, identity, PROGRAM_FILE, ARGUMENTS_TO_START_PROGRAM_WITH)
       print("Program started on " + nodelocation + " vessel " + vesselname)
         
     except experimentlib.SeattleExperimentError, e:

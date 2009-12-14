@@ -114,7 +114,8 @@ def main():
     else:
       print("Will try to acquire " + str(num_vessels_to_request) + " vessels.")
 
-    acquired_vessels = experimentlib.seattlegeni_acquire_vessels(identity, 'wan', num_vessels_to_request)
+    vessel_type = experimentlib.SEATTLEGENI_VESSEL_TYPE_WAN
+    acquired_vessels = experimentlib.seattlegeni_acquire_vessels(identity, vessel_type, num_vessels_to_request)
     
     print("Acquired " + str(num_vessels_to_request) + " vessels: " + str(acquired_vessels))
 

@@ -47,6 +47,13 @@
 <Notes>
 
   Object Definitions:
+      
+    * identity: a dictionary that minimally contains a public key but may also
+      contain the related private key and the username of a corresponding
+      SeattleGENI account. When one wants to perform any operation that would
+      require a public key, private key, or username, an identity must be
+      provided. An identity can be created using the functions named
+      create_identity_from_*.
   
     * vesselhandle: a vesselhandle is a string that contains the information
       required to uniquely identify a vessel, regardless of the current
@@ -57,9 +64,9 @@
       identify a node, regardless of its current location.
       
     * vesselname: a string containing the name of a vessel. This name will
-      be unique on any given node, but the same likely is used for vessels
-      on other nodes. Thus, this does not uniquely identify a vessel, in
-      general. To uniquely identify a vessel, a vesselhandle is needed.
+      be unique on any given node, but the same name is likely is used for
+      vessels on other nodes. Thus, this does not uniquely identify a vessel,
+      in general. To uniquely identify a vessel, a vesselhandle is needed.
 
     * nodelocation: a string containing the location of a node. This will not
       always be "ip:port". It could, for example, be "NATid:port" in the case
@@ -70,16 +77,6 @@
       'vesselname', and 'nodeid'. Additional keys will be present depending on
       the function that returns the vesseldict. See the individual function
       docstring for details.
-      
-    * identity: a dictionary that minimally contains a public key but may also
-      contain the related private key and the username of a corresponding
-      SeattleGENI account. When one wants to perform any operation that would
-      require a public key, private key, or username, an identity must be
-      provided. An identity can be created using the functions named
-      create_identity_from_*.
-      
-    * monitorhandle: an object that can be provided to various functions to
-      update or modify a previously created vessel status monitor.
   
   Exceptions:
   
@@ -109,23 +106,25 @@
 
 import os
 import random
-import sys
-import threading
+import time
 import traceback
 import xmlrpclib
 
 import seattlegeni_xmlrpc
 
-from repyportability import *
-import repyhelper
+# We use a helper module to do repy module imports so that we don't import
+# unexpected items into this module's namespace. This helps reduce errors
+# because editors/pylint make it clear when an unknown identifier is used
+# and it also makes other things easier for developers, such as using ipython's
+# tab completion and not causing unexpected imports if someone using this
+# module decides to use "from experimentlib import *"
+import repyimporter
 
-repyhelper.translate_and_import("nmclient.repy")
-repyhelper.translate_and_import("time.repy")
-repyhelper.translate_and_import("rsa.repy")
-repyhelper.translate_and_import("listops.repy")
-repyhelper.translate_and_import("parallelize.repy")
-repyhelper.translate_and_import("domainnameinfo.repy")
-repyhelper.translate_and_import("advertise.repy")   #  used to do OpenDHT lookups
+nmclient = repyimporter.import_repy_module("nmclient")
+repytime = repyimporter.import_repy_module("time")
+rsa = repyimporter.import_repy_module("rsa")
+parallelize = repyimporter.import_repy_module("parallelize")
+advertise = repyimporter.import_repy_module("advertise")
 
 # The maximum number of node locations to return from a call to lookup_node_locations.
 max_lookup_results = 1024 * 1024
@@ -160,13 +159,23 @@ SEATTLEGENI_VESSEL_TYPE_LAN = "lan"
 SEATTLEGENI_VESSEL_TYPE_NAT = "nat"
 SEATTLEGENI_VESSEL_TYPE_RAND = "rand"
 
-# TODO: Are there any other status actually used? nmstatusmonitory.py shows
-# that ThreadErr and Stale may be possibilities. How about others? Also,
-# we should describe what these mean. For example, what's the difference
-# between stopped and terminated?
+# Some of these vessel status explanations are from:
+# https://seattle.cs.washington.edu/wiki/NodeManagerDesign
+
+# Fresh: has never been started.
 VESSEL_STATUS_FRESH = "Fresh"
+
+# Started: has been started and is running when last checked.
 VESSEL_STATUS_STARTED = "Started"
+
+# Stopped: was running but stopped by NM command
 VESSEL_STATUS_STOPPED = "Stopped"
+
+# Stale: it last reported a start of "Started" but significant time has
+# elapsed, likely due to a system crash (what does "system crash" mean?).
+VESSEL_STATUS_STALE = "Stale"
+
+# Terminated (the vessel stopped of its own volition, possibly due to an error)
 VESSEL_STATUS_TERMINATED = "Terminated"
 
 # The node is not advertising
@@ -184,7 +193,8 @@ VESSEL_STATUS_NODE_UNREACHABLE = "NODE_UNREACHABLE"
 # all possible statuses grouped by whether the status indicates the vessel is
 # usable/active or whether it is unusable/inactive.
 VESSEL_STATUS_SET_ACTIVE = set([VESSEL_STATUS_FRESH, VESSEL_STATUS_STARTED,
-                                VESSEL_STATUS_STOPPED, VESSEL_STATUS_TERMINATED])
+                                VESSEL_STATUS_STOPPED, VESSEL_STATUS_STALE,
+                                VESSEL_STATUS_TERMINATED])
 VESSEL_STATUS_SET_INACTIVE = set([VESSEL_STATUS_NO_SUCH_NODE, VESSEL_STATUS_NO_SUCH_VESSEL,
                                   VESSEL_STATUS_NODE_UNREACHABLE])
 
@@ -195,22 +205,6 @@ _initialize_time_called = False
 # Note that this method of caching nmhandles will cause problems if multiple
 # identities/keys are being used to contact the name node.
 _nmhandle_cache = {}
-
-# Keys are monitor ids we generate. Values are dicts with the following keys:
-#    'vesselhandle_list': the list of vesselhandles this monitor is registered for.
-#    'vessels': stored data related to individual vessels.
-#    'waittime': the number of seconds between initiating processing of vessels.
-#    'callback': a the registered callback function
-#    'timerhandle': a timer handle for the registered callback
-#    'concurrency': the number of threads to use to process vessels.
-_vessel_monitors = {}
-
-_monitor_lock = threading.Lock()
-
-# TODO: Do we want a global node-communication lock to prevent
-# multiple threads/monitors from talking to the same node at the
-# same time? The biggest concern might be just communication errors
-# from more than three simultaneous connections to the node.
 
 # Keys are nodeids, values are nodelocations.
 _node_location_cache = {}
@@ -298,7 +292,7 @@ def _validate_vesselhandle(vesselhandle):
   
   parts = vesselhandle.split(':')
   if len(parts) != 2:
-    raise ValueError("vesselhandle '" + vesselhandle + "' invalid, should be nodeid:vesselname")
+    raise ValueError("invalid vesselhandle '" + vesselhandle + "', should be nodeid:vesselname")
 
 
 
@@ -357,13 +351,6 @@ def _validate_identity(identity, require_private_key=False, require_username=Fal
 
 
 
-def _debug_print(msg):
-  print >> sys.stderr, msg
-
-
-
-
-
 def _initialize_time():
   """
   Does its best to call time_updatetime() and raises a SeattleExperimentError
@@ -381,10 +368,10 @@ def _initialize_time():
     
     for localport in portlist:
       try:
-        time_updatetime(localport)
+        repytime.time_updatetime(localport)
         _initialize_time_called = True
         return
-      except TimeError:
+      except repytime.TimeError:
         error_message = traceback.format_exc()
     
     raise SeattleExperimentError("Failed to perform time_updatetime(): " + error_message)
@@ -396,8 +383,8 @@ def _initialize_time():
 def _create_list_from_key_in_dictlist(dictlist, key):
   """
   List comprehensions are verboten by our coding style guide (generally for
-  good reason). Otherwise, we wouldn't have function and would just write the
-  following wherever needed:
+  good reason). Otherwise, we wouldn't have this function and would just write
+  the following wherever needed:
     [x[key] for x in dictlist]
   """
   new_list = []
@@ -434,11 +421,12 @@ def _get_nmhandle(nodelocation, identity=None):
   if nodelocation not in _nmhandle_cache[identitystring]:
     try:
       if 'privatekey_dict' in identity:
-        nmhandle = nmclient_createhandle(host, port, privatekey=identity['privatekey_dict'],
+        nmhandle = nmclient.nmclient_createhandle(host, port, privatekey=identity['privatekey_dict'],
                                            publickey=identity['publickey_dict'], timeout=defaulttimeout)
       else:
-        nmhandle = nmclient_createhandle(host, port, publickey=identity['publickey_dict'], timeout=defaulttimeout)
-    except NMClientException, e:
+        nmhandle = nmclient.nmclient_createhandle(host, port, publickey=identity['publickey_dict'],
+                                                  timeout=defaulttimeout)
+    except nmclient.NMClientException, e:
       raise NodeCommunicationError(str(e))
     
     _nmhandle_cache[identitystring][nodelocation] = nmhandle
@@ -483,18 +471,18 @@ def run_parallelized(targetlist, func, *args):
   """
   
   try:
-    phandle = parallelize_initfunction(targetlist, func, num_worker_threads, *args)
+    phandle = parallelize.parallelize_initfunction(targetlist, func, num_worker_threads, *args)
   
-    while not parallelize_isfunctionfinished(phandle):
+    while not parallelize.parallelize_isfunctionfinished(phandle):
       # TODO: Give up after a timeout? This seems risky as run_parallelized may
       # be used with functions that take a long time to complete and very large
       # lists of targets. It would be a shame to break a user's program because
       # of an assumption here. Maybe it should be an optional argument to 
       # run_parallelized.
-      sleep(.1)
+      time.sleep(.1)
     
-    results = parallelize_getresults(phandle)
-  except ParallelizeError:
+    results = parallelize.parallelize_getresults(phandle)
+  except parallelize.ParallelizeError:
     raise SeattleExperimentError("Error occurred in run_parallelized: " + 
                                  traceback.format_exc())
 
@@ -534,13 +522,13 @@ def create_identity_from_key_files(publickey_fn, privatekey_fn=None):
   identity["username"] = os.path.basename(publickey_fn).split(".")[0]
   identity["publickey_fn"] = publickey_fn
   try:
-    identity["publickey_dict"] = rsa_file_to_publickey(publickey_fn)
-    identity["publickey_str"] = rsa_publickey_to_string(identity["publickey_dict"])
+    identity["publickey_dict"] = rsa.rsa_file_to_publickey(publickey_fn)
+    identity["publickey_str"] = rsa.rsa_publickey_to_string(identity["publickey_dict"])
     
     if privatekey_fn is not None:
       identity["privatekey_fn"] = privatekey_fn
-      identity["privatekey_dict"] = rsa_file_to_privatekey(privatekey_fn)
-      identity["privatekey_str"] = rsa_privatekey_to_string(identity["privatekey_dict"])
+      identity["privatekey_dict"] = rsa.rsa_file_to_privatekey(privatekey_fn)
+      identity["privatekey_str"] = rsa.rsa_privatekey_to_string(identity["privatekey_dict"])
   except IOError:
     raise
   except ValueError:
@@ -579,15 +567,17 @@ def create_identity_from_key_strings(publickey_string, privatekey_string=None, u
   identity = {}
   identity["username"] = username
   try:
-    identity["publickey_dict"] = rsa_string_to_publickey(publickey_string)
-    identity["publickey_str"] = rsa_publickey_to_string(identity["publickey_dict"])
+    identity["publickey_dict"] = rsa.rsa_string_to_publickey(publickey_string)
+    identity["publickey_str"] = rsa.rsa_publickey_to_string(identity["publickey_dict"])
     
     if privatekey_string is not None:
-      identity["privatekey_dict"] = rsa_string_to_privatekey(privatekey_string)
-      identity["privatekey_str"] = rsa_privatekey_to_string(identity["privatekey_dict"])
+      identity["privatekey_dict"] = rsa.rsa_string_to_privatekey(privatekey_string)
+      identity["privatekey_str"] = rsa.rsa_privatekey_to_string(identity["privatekey_dict"])
   except IOError:
+    # Raised if there is a problem reading the file.
     raise
   except ValueError:
+    # Raised by the repy rsa module when the key is invald.
     raise
 
   return identity
@@ -599,13 +589,13 @@ def create_identity_from_key_strings(publickey_string, privatekey_string=None, u
 def _lookup_node_locations(keystring, lookuptype=None):
   """Does the actual work of an advertise lookup."""
   
-  keydict = rsa_string_to_publickey(keystring)
+  keydict = rsa.rsa_string_to_publickey(keystring)
   try:
     if lookuptype is not None:
-      nodelist = advertise_lookup(keydict, maxvals=max_lookup_results, timeout=defaulttimeout, lookuptype=lookuptype)
+      nodelist = advertise.advertise_lookup(keydict, maxvals=max_lookup_results, timeout=defaulttimeout, lookuptype=lookuptype)
     else:
-      nodelist = advertise_lookup(keydict, maxvals=max_lookup_results, timeout=defaulttimeout)
-  except AdvertiseError, e:
+      nodelist = advertise.advertise_lookup(keydict, maxvals=max_lookup_results, timeout=defaulttimeout)
+  except advertise.AdvertiseError, e:
     raise UnableToPerformLookupError("Failure when trying to perform advertise lookup: " + 
                                      traceback.format_exc())
 
@@ -727,8 +717,8 @@ def browse_node(nodelocation, identity):
     
     nmhandle = _get_nmhandle(nodelocation, identity)
     try:
-      nodeinfo = nmclient_getvesseldict(nmhandle)
-    except NMClientException, e:
+      nodeinfo = nmclient.nmclient_getvesseldict(nmhandle)
+    except nmclient.NMClientException, e:
       raise NodeCommunicationError("Failed to communicate with node " + nodelocation + ": " + str(e))
   
     # We do our own looking through the nodeinfo rather than use the function
@@ -742,7 +732,7 @@ def browse_node(nodelocation, identity):
           identity['publickey_dict'] in nodeinfo['vessels'][vesselname]['userkeys']:
         usablevessels.append(vesselname)
   
-    nodeid = rsa_publickey_to_string(nodeinfo['nodekey'])
+    nodeid = rsa.rsa_publickey_to_string(nodeinfo['nodekey'])
     # For efficiency, let's update the _node_location_cache with this info.
     # This can prevent individual advertise lookups of each nodeid by other
     # functions in the experimentlib that may be called later.
@@ -768,265 +758,6 @@ def browse_node(nodelocation, identity):
     # Useful for debugging during development of the experimentlib.
     #traceback.print_exc()
     raise
-
-
-
-
-
-def _run_monitor(monitordict):
-  """Performs the actual monitoring of vessels."""
-  # Copy the vesselhandle_list so that changes made to the list can't happen
-  # while the parallelized call is being done.
-  vesselhandle_list = monitordict['vesselhandle_list'][:]
-  
-  run_parallelized(vesselhandle_list, _check_vessel_status_change, monitordict)
-  
-  # We finished the last run, now schedule another.
-  monitordict['timerhandle'] = settimer(monitordict['waittime'], _run_monitor, [monitordict])
-
-
-
-
-
-def _check_vessel_status_change(vesselhandle, monitordict):
-  """
-  Checks the status of an individual vessel and calls the registered
-  callback function for the monitor if the vessel's status has changed since
-  the last time it was checked.
-  """
-  try:
-    # When the monitor is removed/canceled, the parallelized function isn't
-    # aborted and we instead just have each of these calls immediately return.
-    if monitordict['canceled']:
-      return
-    
-    datadict = monitordict['vessels'][vesselhandle]
-    if 'status' not in datadict:
-      datadict['status'] = ''
-      
-    old_data = datadict.copy()
-    
-    status = get_vessel_status(vesselhandle, monitordict['identity'])
-    datadict['status'] = status
-    
-    # No matter where the above try block returned from, we want to see if
-    # the vessel data changed and call the user's callback if it has.
-    new_data = datadict.copy()
-    
-    # Note that by not letting the lock go before we call the user's callback
-    # function, the processing of all of the vessels will slow down but we
-    # avoid requiring the user to handle locking to protect against another
-    # call to the callback for the same vessel.
-    if old_data['status'] != new_data['status']:
-      try:
-        # TODO: make sure that exception's from the user's code end up
-        # somewhere where the user has access to them. For now, we leave it to
-        # the user to make sure they handle exceptions rather than let them
-        # escape their callback and this is documented in the docstring of
-        # the function register_vessel_status_monitor.
-        monitordict['callback'](vesselhandle, old_data['status'], new_data['status'])
-      
-      except Exception:
-        _debug_print("Exception occurred in vessel status change callback:")
-        _debug_print(traceback.format_exc())
-  
-    # In order to prevent repeating failures, we remove the vesselhandle
-    # from the monitor's list if the status indicates a positive response.
-    # This means that scripts should occasionally add their known active
-    # vessels to the monitor to prevent temporary failures from causing the
-    # vessel to be subsequently ignored forever.
-    if status in VESSEL_STATUS_SET_INACTIVE:
-      _monitor_lock.acquire()
-      try:
-        monitordict['vesselhandle_list'].remove(vesselhandle)
-        # We don't "del monitordict['vessels'][vesselhandle]" because it
-        # doesn't hurt anything to leave it other than taking up a bit of
-        # space, and it feels safer to leave it there just in case, for
-        # example, this code got changed to put the "remove" call in the
-        # try block above when access to the vessel's lock is still needed.
-      finally:
-        _monitor_lock.release()
-      
-  except Exception:
-    _debug_print(traceback.format_exc())
-
-
-
-
-
-
-def register_vessel_status_monitor(identity, vesselhandle_list, callback, waittime=300, concurrency=10):
-  """
-  <Purpose>
-    Registers a vessel status monitor. Once registered, a monitor occassionally
-    checks the status of each vessel. If the vessel's status has changed or was
-    never checked before, the provided callback function is called with
-    information about the status change.
-  <Arguments>
-    identity
-      The identity to be used when looking checking vessel status. This is
-      mostly needed to determine whether the vessel exists but no longer is
-      usable by the identity (that is, if the public key of the identity is
-      no longer neither the owner or a user of the vessel).
-    vesselhandle_list
-      A list of vesselhandles of the vessels to be monitored.
-    callback
-      The callback function. This should accept three arguments:
-        (vesselhandle, oldstatus, newstatus)
-      where oldstatus and newstatus are both strings. Any exceptions raised by
-      the callback will be silently ignored, so the callback should implement
-      exception handling.
-    waittime
-      How many seconds to wait between status checks. This will be the time
-      between finishing a check of all vessels and starting another round of
-      checking.
-    concurrency
-      The number of threads to use for communicating with nodes. This will be
-      the maximum number of vessels that can be checked simultaneously.
-  <Exceptions>
-    None
-  <Side Effects>
-    Immediately starts a vessel monitor running.
-  <Returns>
-    A monitorhandle which can be used to update or cancel this monitor.
-  """
-  _validate_vesselhandle_list(vesselhandle_list)
-  _validate_identity(identity)
-  
-  # We copy the vesselhandle_list so that the user doesn't directly modify.
-  vesselhandle_list = vesselhandle_list[:]
-  
-  _monitor_lock.acquire()
-  try:
-    # Create a new monitor key in the the _vessel_monitors dict.
-    for attempt in range(10):
-      id = "MONITOR_" + str(random.random())
-      if id not in _vessel_monitors:
-        break
-    else:
-      # I don't intend users to need to worry about this exception. I also
-      # don't know of a more specific built-in exception to use and I don't
-      # feel this should raise a SeattleExperimentException. Therefore,
-      # intentionally raising a generic Exception here.
-      raise Exception("Can't generate a unique vessel monitor id. " + 
-                      "This probably means a bug in experimentlib.py")
-    _vessel_monitors[id] = {}
-    
-    _vessel_monitors[id]['vesselhandle_list'] = vesselhandle_list
-    _vessel_monitors[id]['waittime'] = waittime
-    _vessel_monitors[id]['callback'] = callback
-    _vessel_monitors[id]['concurrency'] = concurrency
-    _vessel_monitors[id]['identity'] = identity
-    # Whether the monitor was canceled/removed. Used to indicate to a running
-    # monitor that it should stop doing work.
-    _vessel_monitors[id]['canceled'] = False
-    
-    # Keeps track of the status of individual vessels. This is used by
-    # vessel monitors to determine when the status has changed.
-    _vessel_monitors[id]['vessels'] = {}
-    for handle in vesselhandle_list:
-      _vessel_monitors[id]['vessels'][handle] = {}
-    
-    # The first time we run it we don't delay. Storing the timer handle is a
-    # bit useless in this case but we do it for consistency.
-    _vessel_monitors[id]['timerhandle'] = settimer(0, _run_monitor, [_vessel_monitors[id]])
-    
-    return id
-  
-  finally:
-    _monitor_lock.release()
-
-  
-
-
-
-def remove_vessel_status_monitor(monitorhandle):
-  """
-  <Purpose>
-    Cancel a monitor that was created through register_vessel_status_monitor.
-    Note that this will not terminate any already active run of the monitor
-    (a run is a pass through contacting all relevant nodes to determine
-    vessel status), but it will prevent future runs from starting.
-  <Arguments>
-    monitorhandle
-      A monitorhandle returned by register_vessel_status_monitor.
-  <Exceptions>
-    ValueError
-      If no such monitorhandle exists (including if it was already removed).
-  <Side Effects>
-    Stops future runs of the monitor and signals to any currently running
-    monitor to stop. It is still possible that the registered callback for
-    the monitor will be called after this function returns.
-  <Returns>
-    None
-  """
-  _monitor_lock.acquire()
-  try:
-    # Ensure the monitorhandle is valid.
-    if not monitorhandle in _vessel_monitors:
-      raise ValueError("The provided monitorhandle is invalid: " + str(monitorhandle))
-    
-    # Not using parallelize_abortfunction() because I didn't want to complicate
-    # things by needing a way to get a hold of the parellelizehandle. Instead,
-    # individual calls to _check_vessel_status_change will check if the monitor
-    # was removed/canceled before doing any work.
-    _vessel_monitors[monitorhandle]['canceled'] = True
-    
-    # Ignore the return value from canceltimer. If the user wants to ensure
-    # that no further actions are taken in their own code due to this monitor,
-    # they can do so by ignoring calls to their provided callback.
-    canceltimer(_vessel_monitors[monitorhandle]['timerhandle'])
-    
-    del _vessel_monitors[monitorhandle]
-    
-  finally:
-    _monitor_lock.release()
-
-
-
-
-
-def add_to_vessel_status_monitor(monitorhandle, vesselhandle_list):
-  """
-  <Purpose>
-    Adds the vesselhandles in vesselhandle_list to the specified monitor. If
-    any already are watched by the monitor, they are silently ignored. There
-    is no removal of previously added vesselhandles other than automatic
-    removal done when vessels are unreachable or otherwise invalid.
-    
-    One intention of this function is that new vessels found via a
-    lookup_node_locations_by_identity and then find_vessels_on_nodes can be
-    passed to this function as a way of making sure the monitor knows about
-    new vessels that a user has just obtained access to or which have recently
-    come online. 
-  <Arguments>
-    monitorhandle
-      A monitorhandle returned by register_vessel_status_monitor.
-    vesselhandle_list
-      A list of vesselhandles to add to the monitor.
-  <Side Effects>
-    The next run of the monitor will include the provided vesselhandles.
-  <Exceptions>
-    ValueError
-      If no such monitorhandle exists (including if it was already removed).
-  <Returns>
-    None
-  """
-  _validate_vesselhandle_list(vesselhandle_list)
-  
-  _monitor_lock.acquire()
-  try:
-    # Ensure the monitorhandle is valid.
-    if not monitorhandle in _vessel_monitors:
-      raise ValueError("The provided monitorhandle is invalid: " + str(monitorhandle))
-    
-    for vesselhandle in vesselhandle_list:
-      if vesselhandle not in _vessel_monitors[monitorhandle]['vesselhandle_list']:
-        _vessel_monitors[monitorhandle]['vesselhandle_list'].append(vesselhandle)
-        _vessel_monitors[monitorhandle]['vessels'][vesselhandle] = {}
-    
-  finally:
-    _monitor_lock.release()
 
 
 
@@ -1059,8 +790,6 @@ def get_vessel_status(vesselhandle, identity):
     # This will get a cached node location if one exists.
     nodelocation = get_node_location(nodeid)
   except NodeLocationNotAdvertisedError, e:
-    # If we can't find the node, then it must not be advertising.
-    _debug_print("get_vessel_status cannot determine location of node: " + str(e))
     return VESSEL_STATUS_NO_SUCH_NODE
   
   try:
@@ -1102,8 +831,8 @@ def _do_public_node_request(nodeid, requestname, *args):
   nmhandle = _get_nmhandle(nodelocation)
   
   try:
-    return nmclient_rawsay(nmhandle, requestname, *args)
-  except NMClientException, e:
+    return nmclient.nmclient_rawsay(nmhandle, requestname, *args)
+  except nmclient.NMClientException, e:
     raise NodeCommunicationError(str(e))
 
 
@@ -1118,15 +847,15 @@ def _do_signed_vessel_request(identity, vesselhandle, requestname, *args):
   nmhandle = _get_nmhandle(nodelocation, identity)
   
   try:
-    return nmclient_signedsay(nmhandle, requestname, vesselname, *args)
-  except NMClientException, e:
+    return nmclient.nmclient_signedsay(nmhandle, requestname, vesselname, *args)
+  except nmclient.NMClientException, e:
     raise NodeCommunicationError(str(e))
 
 
 
 
 
-def get_offcut_resources(nodeid):
+def get_node_offcut_resources(nodeid):
   """
   <Purpose>
     Obtain information about offcut resources on a node.
@@ -1143,16 +872,16 @@ def get_offcut_resources(nodeid):
   <Returns>
     A string containing information about the node's offcut resources.
   """
-  # TODO: This function might be more useful to process the string returned
-  # by the nodemanager and return it from this function as some well-defined
-  # data structure.
+  # TODO: This function might be more useful if it processed the string
+  # returned by the nodemanager and return it from this function as some
+  # well-defined data structure.
   return _do_public_node_request(nodeid, "GetOffcutResources")
   
 
 
 
 
-def get_restrictions_info(vesselhandle):
+def get_vessel_resources(vesselhandle):
   """
   <Purpose>
     Obtain vessel resource/restrictions information.
@@ -1170,9 +899,9 @@ def get_restrictions_info(vesselhandle):
   <Returns>
     A string containing the vessel resource/restrictions information.
   """
-  # TODO: This function might be more useful to process the string returned
-  # by the nodemanager and return it from this function as some well-defined
-  # data structure.
+  # TODO: This function might be more useful if it processed the string
+  # returned by the nodemanager and return it from this function as some
+  # well-defined data structure.
   nodeid, vesselname = get_nodeid_and_vesselname(vesselhandle)
   return _do_public_node_request(nodeid, "GetVesselResources", vesselhandle)
   
@@ -1180,7 +909,7 @@ def get_restrictions_info(vesselhandle):
 
 
 
-def get_log(vesselhandle, identity):
+def get_vessel_log(vesselhandle, identity):
   """
   <Purpose>
     Read the vessel log.
@@ -1205,7 +934,8 @@ def get_log(vesselhandle, identity):
 
 
 
-def get_file_list(vesselhandle, identity):
+
+def get_vessel_file_list(vesselhandle, identity):
   """
   <Purpose>
     Get a list of files that are on the vessel.
@@ -1226,12 +956,16 @@ def get_file_list(vesselhandle, identity):
   """
   _validate_vesselhandle(vesselhandle)
   file_list_string = _do_signed_vessel_request(identity, vesselhandle, "ListFilesInVessel")
-  return file_list_string.split(' ')
+  if not file_list_string:
+    return []
+  else:
+    return file_list_string.split(' ')
 
 
 
 
-def upload_file(vesselhandle, identity, local_filename, remote_filename=None):
+
+def upload_file_to_vessel(vesselhandle, identity, local_filename, remote_filename=None):
   """
   <Purpose>
     Upload a file to a vessel.
@@ -1274,8 +1008,8 @@ def upload_file(vesselhandle, identity, local_filename, remote_filename=None):
 
 
 
-def download_file(vesselhandle, identity, remote_filename, local_filename=None,
-                  add_location_suffix=False, return_file_contents=False):
+def download_file_from_vessel(vesselhandle, identity, remote_filename, local_filename=None,
+                              add_location_suffix=False, return_file_contents=False):
   """
   <Purpose>
     Download a file from a vessel.
@@ -1336,7 +1070,7 @@ def download_file(vesselhandle, identity, remote_filename, local_filename=None,
 
 
 
-def delete_file(vesselhandle, identity, filename):
+def delete_file_in_vessel(vesselhandle, identity, filename):
   """
   <Purpose>
     Delete a file from a vessel.
@@ -1494,10 +1228,10 @@ def split_vessel(vesselhandle, identity, resourcedata):
 
 
 
-def combine_vessels(identity, vesselhandle1, vesselhandle2):
+def join_vessels(identity, vesselhandle1, vesselhandle2):
   """
   <Purpose>
-    Join a two vessels on the same node into one, larger vessel.
+    Join (combine) two vessels on the same node into one, larger vessel.
     
     THIS OPERATION IS ONLY AVAILABLE TO THE OWNER OF THE VESSEL.
     If you have acquired the vessel through SeattleGENI, you are a user of the
@@ -1757,11 +1491,11 @@ def get_node_location(nodeid, ignorecache=False):
         try:
           # We create an nmhandle directly because we want to use it to test
           # basic communication, which is done when an nmhandle is created.
-          nmhandle = nmclient_createhandle(host, int(portstr))
-        except NMClientException, e:
+          nmhandle = nmclient.nmclient_createhandle(host, int(portstr))
+        except nmclient.NMClientException, e:
           continue
         else:
-          nmclient_destroyhandle(nmhandle)
+          nmclient.nmclient_destroyhandle(nmhandle)
           _node_location_cache[nodeid] = possiblelocation
           break
       else:
@@ -1775,8 +1509,6 @@ def get_node_location(nodeid, ignorecache=False):
   
 
 
-
-  
   
 def _call_seattlegeni_func(func, *args, **kwargs):
   """
@@ -1804,7 +1536,7 @@ def _get_seattlegeni_client(identity):
   
   if "seattlegeniclient" not in identity:
     _validate_identity(identity, require_private_key=True, require_username=True)
-    private_key_string = rsa_privatekey_to_string(identity["privatekey_dict"])
+    private_key_string = rsa.rsa_privatekey_to_string(identity["privatekey_dict"])
     # We use _call_seattlegeni_func because the SeattleGENIClient constructor
     # may attempt to communicate with SeattleGENI.
     client = _call_seattlegeni_func(seattlegeni_xmlrpc.SeattleGENIClient,
@@ -1837,7 +1569,7 @@ def _seattlegeni_cache_node_locations(seattlegeni_vessel_list):
 
 
 
-def seattlegeni_acquire_vessels(identity, type, number):
+def seattlegeni_acquire_vessels(identity, vesseltype, number):
   """
   <Purpose>
     Acquire vessels of a certain type from SeattleGENI. This is an
@@ -1846,7 +1578,7 @@ def seattlegeni_acquire_vessels(identity, type, number):
   <Arguments>
     identity
       The identity to use for communicating with SeattleGENI.
-    type
+    vesseltype
       The type of vessels to be acquired. This must be one of the constants
       named SEATTLEGENI_VESSEL_TYPE_*
     number
@@ -1862,7 +1594,7 @@ def seattlegeni_acquire_vessels(identity, type, number):
     A list of vesselhandles of the acquired vessels.
   """
   client = _get_seattlegeni_client(identity)
-  seattlegeni_vessel_list = _call_seattlegeni_func(client.acquire_resources, type, number)
+  seattlegeni_vessel_list = _call_seattlegeni_func(client.acquire_resources, vesseltype, number)
 
   _seattlegeni_cache_node_locations(seattlegeni_vessel_list)
   
@@ -2055,6 +1787,8 @@ def seattlegeni_max_vessels_allowed(identity):
     The maximum number of vessels the account can acquire (an integer).
   """  
   client = _get_seattlegeni_client(identity)
+  # We can't cache this value because it may change as the user's donations
+  # come online and go offline.
   return _call_seattlegeni_func(client.get_account_info)['max_vessels']
 
 
@@ -2077,4 +1811,10 @@ def seattlegeni_user_port(identity):
     The port number (an integer).
   """  
   client = _get_seattlegeni_client(identity)
-  return _call_seattlegeni_func(client.get_account_info)['user_port']
+  # The user port won't change, so let's not make a new seattlegeni request
+  # each time just in case someone uses this a lot in their program. We'll go
+  # ahead and keep in this in the identity. It's not a documented part of
+  # the identity so nobody should be trying to access it directly.
+  if 'user_port' not in identity:
+    identity['user_port'] = _call_seattlegeni_func(client.get_account_info)['user_port']
+  return identity['user_port']

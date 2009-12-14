@@ -41,7 +41,7 @@ def main():
       
       print("====================================================================")
       print("Log from " + nodelocation + " " + vesselname)
-      logcontents = experimentlib.get_log(vesselhandle, identity)
+      logcontents = experimentlib.get_vessel_log(vesselhandle, identity)
       print(logcontents)
         
     except experimentlib.SeattleExperimentError, e:

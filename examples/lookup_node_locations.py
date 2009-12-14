@@ -1,5 +1,9 @@
 """
-This script will simply do an advertise lookup of a given key.
+This script will simply do an advertise lookup of a given key to see which
+nodes are advertising their location under that key.
+
+This should show the locations of all active nodes that the key has access to,
+whether as a user or owner of the vessel.
 """
 
 import sys
@@ -17,7 +21,7 @@ import experimentlib
 
 
 
-PUBLICKEY = "65537 123456789"
+PUBLICKEY_FILENAME = "user.publickey"
 
 
 
@@ -25,11 +29,11 @@ PUBLICKEY = "65537 123456789"
 
 def main():
 
-  identity = experimentlib.create_identity_from_key_strings(PUBLICKEY)
+  identity = experimentlib.create_identity_from_key_files(PUBLICKEY_FILENAME)
 
   nodelocation_list = experimentlib.lookup_node_locations_by_identity(identity)
 
-  print("Number of advertising nodes: " + str(len(nodelocation_list)))
+  print("Number of nodes advertising their location under this key: " + str(len(nodelocation_list)))
   
   for nodelocation in nodelocation_list:
     print(nodelocation)
