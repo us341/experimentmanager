@@ -420,7 +420,9 @@ def _get_nmhandle(nodelocation, identity=None):
 
   if nodelocation not in _nmhandle_cache[identitystring]:
     try:
-      if 'privatekey_dict' in identity:
+      if identity is None:
+        nmhandle = nmclient.nmclient_createhandle(host, port, timeout=defaulttimeout)
+      elif 'privatekey_dict' in identity:
         nmhandle = nmclient.nmclient_createhandle(host, port, privatekey=identity['privatekey_dict'],
                                            publickey=identity['publickey_dict'], timeout=defaulttimeout)
       else:
@@ -686,7 +688,7 @@ def find_vessels_on_nodes(identity, nodelocation_list):
 
 
 
-def browse_node(nodelocation, identity):
+def browse_node(nodelocation, identity=None):
   """
   <Purpose>
     Contact an individual node to gather detailed information about all of the
@@ -695,8 +697,9 @@ def browse_node(nodelocation, identity):
     nodelocation
       The nodelocation of the node that should be browsed. 
     identity
-      The identity whose vessels we are interested in. This can be the identity
-      of either the vessel owner or a vessel user.
+      (optional) The identity whose vessels we are interested in. This can be
+      the identity of either the vessel owner or a vessel user. If None,
+      then the vesseldicts for all vessels on the node will be returned.
   <Exceptions>
     NodeCommunicationError
       If the communication with the node fails for any reason, including the
@@ -713,7 +716,8 @@ def browse_node(nodelocation, identity):
   """
   try:
     _validate_nodelocation(nodelocation)
-    _validate_identity(identity)
+    if identity is not None:
+      _validate_identity(identity)
     
     nmhandle = _get_nmhandle(nodelocation, identity)
     try:
@@ -726,7 +730,9 @@ def browse_node(nodelocation, identity):
     # second time.
     usablevessels = []
     for vesselname in nodeinfo['vessels']:
-      if identity['publickey_dict'] == nodeinfo['vessels'][vesselname]['ownerkey']:
+      if identity is None:
+        usablevessels.append(vesselname)
+      elif identity['publickey_dict'] == nodeinfo['vessels'][vesselname]['ownerkey']:
         usablevessels.append(vesselname)
       elif 'userkeys' in nodeinfo['vessels'][vesselname] and \
           identity['publickey_dict'] in nodeinfo['vessels'][vesselname]['userkeys']:
