@@ -1633,7 +1633,7 @@ def seattlegeni_acquire_specific_vessels(identity, vesselhandle_list):
     A list of vesselhandles of the acquired vessels.
   """
   client = _get_seattlegeni_client(identity)
-  seattlegeni_vessel_list = _call_seattlegeni_func(client.acquire_specific_vessels, type, vesselhandle_list)
+  seattlegeni_vessel_list = _call_seattlegeni_func(client.acquire_specific_vessels, vesselhandle_list)
   
   _seattlegeni_cache_node_locations(seattlegeni_vessel_list)
   
