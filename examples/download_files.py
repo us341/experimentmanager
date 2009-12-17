@@ -61,7 +61,7 @@ def main():
       
       for remote_filename in filelist:
         local_filename = os.path.join(vessel_directory, remote_filename)
-        experimentlib.download_file(vesselhandle, identity, remote_filename, local_filename)
+        experimentlib.download_file_from_vessel(vesselhandle, identity, remote_filename, local_filename)
         print("Downloaded " + local_filename)
         
     except experimentlib.SeattleExperimentError, e:
