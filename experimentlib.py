@@ -751,7 +751,7 @@ def browse_node(nodelocation, identity=None):
       vesseldict['vesselhandle'] = nodeid + ":" + vesselname
       vesseldict['nodelocation'] = nodelocation
       vesseldict['vesselname'] = vesselname
-      vesseldict['nodeid'] = nodeinfo['nodekey']
+      vesseldict['nodeid'] = nodeid
       # Additional keys that browse_node provides.
       vesseldict['status'] = nodeinfo['vessels'][vesselname]['status']
       vesseldict['ownerkey'] = nodeinfo['vessels'][vesselname]['ownerkey']
@@ -1432,6 +1432,29 @@ def get_nodeid_and_vesselname(vesselhandle):
 
 
 
+def get_vesselhandle(nodeid, vesselname):
+  """
+  <Purpose>
+    Given a nodeid and vesselname, returns a vesselhandle that represents the
+    vessel.
+  <Arguments>
+    nodeid
+      The nodeid of the node that the vessel is on.
+    vesselname
+      The name of the vessel.
+  <Exceptions>
+    None
+  <Side Effects>
+    None
+  <Returns>
+    A vesselhandle.
+  """
+  return nodeid + ":" + vesselname
+
+
+
+
+
 def get_host_and_port(nodelocation):
   """
   <Purpose>
@@ -1511,7 +1534,33 @@ def get_node_location(nodeid, ignorecache=False):
       _node_location_cache[nodeid] = locationlist[0]
       
   return _node_location_cache[nodeid]
-    
+
+
+
+
+
+def get_nodeid(nodelocation):
+  """
+  <Purpose>
+    Determine a nodelocation given a nodeid. Note that if you have already
+    obtained a vesselhandle for a vessel on the node, you can get the nodeid
+    using get_nodeid_and_vesselname(vesselhandle), which would avoid having
+    to contact the node.
+  <Arguments>
+    nodelocation
+      The nodelocation of the node whose nodeid is to be determined.
+  <Exceptions>
+    NodeCommunicationError
+      If a failure occurs in communicating with the node.
+  <Side Effects>
+    None
+  <Returns>
+    A nodeid.
+  """
+  # We assume at least one vessel on the node. This is a safe assumption
+  # unless there's something very wrong with the node.
+  return browse_node(nodelocation)[0]['nodeid']
+
   
 
 
