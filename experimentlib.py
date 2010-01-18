@@ -756,6 +756,7 @@ def browse_node(nodelocation, identity=None):
       vesseldict['status'] = nodeinfo['vessels'][vesselname]['status']
       vesseldict['ownerkey'] = nodeinfo['vessels'][vesselname]['ownerkey']
       vesseldict['userkeys'] = nodeinfo['vessels'][vesselname]['userkeys']
+      vesseldict['version'] = nodeinfo['version']
       vesseldict_list.append(vesseldict)
   
     return vesseldict_list
@@ -1132,7 +1133,7 @@ def reset_vessel(vesselhandle, identity):
 
 
 
-def start_vessel(vesselhandle, identity, program_file, arg_list=[]):
+def start_vessel(vesselhandle, identity, program_file, arg_list=None):
   """
   <Purpose>
     Start a program running on a vessel.
@@ -1158,8 +1159,9 @@ def start_vessel(vesselhandle, identity, program_file, arg_list=[]):
     None
   """
   _validate_vesselhandle(vesselhandle)
-  arg_list.insert(0, program_file)
-  arg_string = " ".join(arg_list)
+  arg_string = program_file
+  if arg_list is not None:
+    arg_string += " " + " ".join(arg_list)
   _do_signed_vessel_request(identity, vesselhandle, "StartVessel", arg_string)
   
 
