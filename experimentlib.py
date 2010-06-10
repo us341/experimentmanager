@@ -1741,7 +1741,7 @@ def seattlegeni_renew_vessels(identity, vesselhandle_list):
   _validate_vesselhandle_list(vesselhandle_list)
   
   client = _get_seattlegeni_client(identity)
-  _call_seattlegeni_func(client.renew_vessels, vesselhandle_list)
+  _call_seattlegeni_func(client.renew_resources, vesselhandle_list)
 
 
 
