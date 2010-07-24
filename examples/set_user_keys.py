@@ -26,7 +26,7 @@ PRIVATEKEY_FILENAME = "/path/to/user.privatekey"
 VESSELNAME_TO_SET_USER_KEYS_ON = "v100"
 
 # The user keys to set on all vessels owned by this user. This should be a list
-# of keys in string format. If the list is empty, the 
+# of keys in string format. If the list is empty, the keys will be removed
 USERKEY_LIST = []
 
 
@@ -67,24 +67,24 @@ def set_keys(vessel, identity):
   """
 
   if vessel['vesselname'] != VESSELNAME_TO_SET_USER_KEYS_ON:
-    msg = "[" + vessel['location'] + "] Skipping: vesselname is not: " + VESSELNAME_TO_SET_USER_KEYS_ON
+    msg = "[" + vessel['nodelocation'] + "] Skipping: vesselname is not: " + VESSELNAME_TO_SET_USER_KEYS_ON
     print(msg)
     raise Exception(msg)
 
   if vessel['userkeys'] != USERKEY_LIST:
-    print("[" + vessel['location'] + "] Setting user keys.")
+    print("[" + vessel['nodelocation'] + "] Setting user keys.")
     try:
-      experimentlib.set_vessel_users(vessel['handle'], identity, USERKEY_LIST)
+      experimentlib.set_vessel_users(vessel['vesselhandle'], identity, USERKEY_LIST)
     except Exception, e:
-      msg = "[" + vessel['location'] + "] Failure: " + str(e)
+      msg = "[" + vessel['nodelocation'] + "] Failure: " + str(e)
       print(msg)
       import traceback
       traceback.print_exc()
       raise Exception(msg)
     else:
-      print("[" + vessel['location'] + "] Success.")
+      print("[" + vessel['nodelocation'] + "] Success.")
   else:
-    print("[" + vessel['location'] + "] Already had correct user keys.")
+    print("[" + vessel['nodelocation'] + "] Already had correct user keys.")
 
 
 
