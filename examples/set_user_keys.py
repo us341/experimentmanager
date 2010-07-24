@@ -71,7 +71,12 @@ def set_keys(vessel, identity):
     print(msg)
     raise Exception(msg)
 
-  if vessel['userkeys'] != USERKEY_LIST:
+  # convert the list of keys to a list of strings for comparison purposes...
+  existingkeystringlist  = []
+  for thiskey in vessel['userkeys']:
+    existingkeystringlist.append(rsa_publickey_to_string(thiskey))
+
+  if existingkeystringlist != USERKEY_LIST:
     print("[" + vessel['nodelocation'] + "] Setting user keys.")
     try:
       experimentlib.set_vessel_users(vessel['vesselhandle'], identity, USERKEY_LIST)
