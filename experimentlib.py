@@ -487,6 +487,8 @@ def run_parallelized(targetlist, func, *args):
   except parallelize.ParallelizeError:
     raise SeattleExperimentError("Error occurred in run_parallelized: " + 
                                  traceback.format_exc())
+  finally:
+    parallelize.parallelize_closefunction(phandle)
 
   # These are lists of tuples. The first is a list of (target, retval), the
   # second is a list of (target, errormsg)
