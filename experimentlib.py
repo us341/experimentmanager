@@ -120,7 +120,7 @@ import seattlegeni_xmlrpc
 # module decides to use "from experimentlib import *"
 import repyimporter
 
-nmclient = repyimporter.import_repy_module("fastnmclient.mix")
+import fastnmclient
 repytime = repyimporter.import_repy_module("time.repy")
 rsa = repyimporter.import_repy_module("rsa.repy")
 parallelize = repyimporter.import_repy_module("parallelize.repy")
@@ -421,14 +421,14 @@ def _get_nmhandle(nodelocation, identity=None):
   if nodelocation not in _nmhandle_cache[identitystring]:
     try:
       if identity is None:
-        nmhandle = nmclient.nmclient_createhandle(host, port, timeout=defaulttimeout)
+        nmhandle = fastnmclient.nmclient_createhandle(host, port, timeout=defaulttimeout)
       elif 'privatekey_dict' in identity:
-        nmhandle = nmclient.nmclient_createhandle(host, port, privatekey=identity['privatekey_dict'],
+        nmhandle = fastnmclient.nmclient_createhandle(host, port, privatekey=identity['privatekey_dict'],
                                            publickey=identity['publickey_dict'], timeout=defaulttimeout)
       else:
-        nmhandle = nmclient.nmclient_createhandle(host, port, publickey=identity['publickey_dict'],
+        nmhandle = fastnmclient.nmclient_createhandle(host, port, publickey=identity['publickey_dict'],
                                                   timeout=defaulttimeout)
-    except nmclient.NMClientException, e:
+    except fastnmclient.NMClientException, e:
       raise NodeCommunicationError(str(e))
     
     _nmhandle_cache[identitystring][nodelocation] = nmhandle
@@ -723,8 +723,8 @@ def browse_node(nodelocation, identity=None):
     
     nmhandle = _get_nmhandle(nodelocation, identity)
     try:
-      nodeinfo = nmclient.nmclient_getvesseldict(nmhandle)
-    except nmclient.NMClientException, e:
+      nodeinfo = fastnmclient.nmclient_getvesseldict(nmhandle)
+    except fastnmclient.NMClientException, e:
       raise NodeCommunicationError("Failed to communicate with node " + nodelocation + ": " + str(e))
   
     # We do our own looking through the nodeinfo rather than use the function
@@ -840,8 +840,8 @@ def _do_public_node_request(nodeid, requestname, *args):
   nmhandle = _get_nmhandle(nodelocation)
   
   try:
-    return nmclient.nmclient_rawsay(nmhandle, requestname, *args)
-  except nmclient.NMClientException, e:
+    return fastnmclient.nmclient_rawsay(nmhandle, requestname, *args)
+  except fastnmclient.NMClientException, e:
     raise NodeCommunicationError(str(e))
 
 
@@ -856,8 +856,8 @@ def _do_signed_vessel_request(identity, vesselhandle, requestname, *args):
   nmhandle = _get_nmhandle(nodelocation, identity)
   
   try:
-    return nmclient.nmclient_signedsay(nmhandle, requestname, vesselname, *args)
-  except nmclient.NMClientException, e:
+    return fastnmclient.nmclient_signedsay(nmhandle, requestname, vesselname, *args)
+  except fastnmclient.NMClientException, e:
     raise NodeCommunicationError(str(e))
 
 
@@ -1524,11 +1524,11 @@ def get_node_location(nodeid, ignorecache=False):
         try:
           # We create an nmhandle directly because we want to use it to test
           # basic communication, which is done when an nmhandle is created.
-          nmhandle = nmclient.nmclient_createhandle(host, int(portstr))
-        except nmclient.NMClientException, e:
+          nmhandle = fastnmclient.nmclient_createhandle(host, int(portstr))
+        except fastnmclient.NMClientException, e:
           continue
         else:
-          nmclient.nmclient_destroyhandle(nmhandle)
+          fastnmclient.nmclient_destroyhandle(nmhandle)
           _node_location_cache[nodeid] = possiblelocation
           break
       else:
