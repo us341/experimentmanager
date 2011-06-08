@@ -121,10 +121,10 @@ import seattlegeni_xmlrpc
 import repyimporter
 
 import fastnmclient
-repytime = repyimporter.import_repy_module("time.repy")
-rsa = repyimporter.import_repy_module("rsa.repy")
-parallelize = repyimporter.import_repy_module("parallelize.repy")
-advertise = repyimporter.import_repy_module("advertise.repy")
+repytime = repyimporter.import_repy_module("time")
+rsa = repyimporter.import_repy_module("rsa")
+parallelize = repyimporter.import_repy_module("parallelize")
+advertise = repyimporter.import_repy_module("advertise")
 
 # The maximum number of node locations to return from a call to lookup_node_locations.
 max_lookup_results = 1024 * 1024
