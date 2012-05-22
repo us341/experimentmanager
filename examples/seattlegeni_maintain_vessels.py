@@ -26,7 +26,7 @@ import experimentlib
 experimentlib.SEATTLEGENI_ALLOW_SSL_INSECURE = None
 
 # If using secure ssl communication with seattlegeni, then this is the path
-# to the CA certs file. See the file seattlegeni_xmlrpc.py for details.
+# to the CA certs file. See the file seattleclearinghouse_xmlrpc.py for details.
 # This should be a path to the pem file or None (None indicates to use the default)
 experimentlib.SEATTLEGENI_CA_CERTS_FILES = None
 

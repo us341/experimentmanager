@@ -16,7 +16,7 @@
   
 <Usage>
   Ensure that this file is in a directory containing the seattlelib files as
-  well as the seattlegeni_xmlrpc.py module. In your own script, add:
+  well as the seattleclearinghouse_xmlrpc.py module. In your own script, add:
   
     import experimentlib
     
@@ -110,7 +110,7 @@ import time
 import traceback
 import xmlrpclib
 
-import seattlegeni_xmlrpc
+import seattleclearinghouse_xmlrpc
 
 # We use a helper module to do repy module imports so that we don't import
 # unexpected items into this module's namespace. This helps reduce errors
@@ -270,17 +270,17 @@ class IdentityInformationMissingError(SeattleExperimentError):
 
 #This is the base class for all SeattleGENI errors. We make this available
 #in the namespace of the experimentlib so that clients do not have to import
-#seattlegeni_xmlrpc to catch these.
-SeattleGENIError = seattlegeni_xmlrpc.SeattleGENIError
+#seattleclearinghouse_xmlrpc to catch these.
+SeattleGENIError = seattleclearinghouse_xmlrpc.SeattleGENIError
 
 # We make these available, as well, in case users find them useful. We prefix
 # all of these error names with SeattleGENI.
-SeattleGENICommunicationError = seattlegeni_xmlrpc.CommunicationError
-SeattleGENIInternalError = seattlegeni_xmlrpc.InternalError
-SeattleGENIAuthenticationError = seattlegeni_xmlrpc.AuthenticationError
-SeattleGENIInvalidRequestError = seattlegeni_xmlrpc.InvalidRequestError
-SeattleGENINotEnoughCreditsError = seattlegeni_xmlrpc.NotEnoughCreditsError
-SeattleGENIUnableToAcquireResourcesError = seattlegeni_xmlrpc.UnableToAcquireResourcesError
+SeattleGENICommunicationError = seattleclearinghouse_xmlrpc.CommunicationError
+SeattleGENIInternalError = seattleclearinghouse_xmlrpc.InternalError
+SeattleGENIAuthenticationError = seattleclearinghouse_xmlrpc.AuthenticationError
+SeattleGENIInvalidRequestError = seattleclearinghouse_xmlrpc.InvalidRequestError
+SeattleGENINotEnoughCreditsError = seattleclearinghouse_xmlrpc.NotEnoughCreditsError
+SeattleGENIUnableToAcquireResourcesError = seattleclearinghouse_xmlrpc.UnableToAcquireResourcesError
 
 
 
@@ -1572,7 +1572,7 @@ def get_nodeid(nodelocation):
 def _call_seattlegeni_func(func, *args, **kwargs):
   """
   Helper function to limit the potential errors raised by seattlegeni_*
-  functions to SeattleGENIError or classes that extend it. The seattlegeni_xmlrpc
+  functions to SeattleGENIError or classes that extend it. The seattleclearinghouse_xmlrpc
   module doesn't catch ProtocolError or unexpected xmlrpc faults. At the level
   of the experimentlib, though, we just consider these generic failures for the
   purpose of simlifying error handling when using the experimentlib.
@@ -1585,7 +1585,7 @@ def _call_seattlegeni_func(func, *args, **kwargs):
   except xmlrpclib.Fault:
     raise SeattleGENIError("Unexpected XML-RPC fault when talking to SeattleGENI. " +
                            "Are you using a current version of experimentlib.py and " +
-                           "seattlegeni_xmlrpc.py? " + traceback.format_exc())
+                           "seattleclearinghouse_xmlrpc.py? " + traceback.format_exc())
 
   
 
@@ -1598,7 +1598,7 @@ def _get_seattlegeni_client(identity):
     private_key_string = rsa.rsa_privatekey_to_string(identity["privatekey_dict"])
     # We use _call_seattlegeni_func because the SeattleGENIClient constructor
     # may attempt to communicate with SeattleGENI.
-    client = _call_seattlegeni_func(seattlegeni_xmlrpc.SeattleGENIClient,
+    client = _call_seattlegeni_func(seattleclearinghouse_xmlrpc.SeattleGENIClient,
                                     identity['username'],
                                     private_key_string=private_key_string,
                                     xmlrpc_url=SEATTLEGENI_XMLRPC_URL,
