@@ -1596,9 +1596,9 @@ def _get_seattlegeni_client(identity):
   if "seattlegeniclient" not in identity:
     _validate_identity(identity, require_private_key=True, require_username=True)
     private_key_string = rsa.rsa_privatekey_to_string(identity["privatekey_dict"])
-    # We use _call_seattlegeni_func because the SeattleGENIClient constructor
-    # may attempt to communicate with SeattleGENI.
-    client = _call_seattlegeni_func(seattleclearinghouse_xmlrpc.SeattleGENIClient,
+    # We use _call_seattlegeni_func because the SeattleClearinghouseClient constructor
+    # may attempt to communicate with SeattleClearinghouse.
+    client = _call_seattlegeni_func(seattleclearinghouse_xmlrpc.SeattleClearinghouseClient,
                                     identity['username'],
                                     private_key_string=private_key_string,
                                     xmlrpc_url=SEATTLEGENI_XMLRPC_URL,
