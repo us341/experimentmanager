@@ -49,8 +49,8 @@ PROGRAM_FILE = "myprogram.py"
 ARGUMENTS_TO_START_PROGRAM_WITH = []
 
 # For test_seattlegeni_maintain_vessels().
-experimentlib.SEATTLEGENI_ALLOW_SSL_INSECURE = False
-experimentlib.SEATTLEGENI_CA_CERTS_FILES = None
+experimentlib.SEATTLECLEARINGHOUSE_ALLOW_SSL_INSECURE = False
+experimentlib.SEATTLECLEARINGHOUSE_CA_CERTS_FILES = None
 MIN_VESSELS_TO_KEEP = 4
 
 # For test_upload_files().

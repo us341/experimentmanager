@@ -36,7 +36,7 @@ import experimentlib
 #experimentlib.num_worker_threads = 10
 
 # The public key that all seattlegeni nodes advertise under.
-SEATTLEGENI_PUBLICKEY_FILENAME = "seattlegeni_advertisement.publickey"
+SEATTLECLEARINGHOUSE_PUBLICKEY_FILENAME = "seattlegeni_advertisement.publickey"
 
 # Useful for development. Only contact this many nodes.
 MAX_NODES_TO_LOOK_AT = 5
@@ -47,7 +47,7 @@ MAX_NODES_TO_LOOK_AT = 5
 
 def main():
 
-  identity = experimentlib.create_identity_from_key_files(SEATTLEGENI_PUBLICKEY_FILENAME)
+  identity = experimentlib.create_identity_from_key_files(SEATTLECLEARINGHOUSE_PUBLICKEY_FILENAME)
 
   nodelocation_list = experimentlib.lookup_node_locations_by_identity(identity)
   print("Number of advertising nodes: " + str(len(nodelocation_list)))

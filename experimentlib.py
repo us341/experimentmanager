@@ -149,15 +149,15 @@ advertise_lookup_types = ['central']
 
 # A few options to be passed along to the SeattleGENI xmlrpc client.
 # None means the default.
-SEATTLEGENI_XMLRPC_URL = None
-SEATTLEGENI_ALLOW_SSL_INSECURE = None # Set to True to allow insecure SSL.
-SEATTLEGENI_CA_CERTS_FILES = None
+SEATTLECLEARINGHOUSE_XMLRPC_URL = None
+SEATTLECLEARINGHOUSE_ALLOW_SSL_INSECURE = None # Set to True to allow insecure SSL.
+SEATTLECLEARINGHOUSE_CA_CERTS_FILES = None
 
 # These constants can be used as the type argument to seattlegeni_acquire_vessels.
-SEATTLEGENI_VESSEL_TYPE_WAN = "wan"
-SEATTLEGENI_VESSEL_TYPE_LAN = "lan"
-SEATTLEGENI_VESSEL_TYPE_NAT = "nat"
-SEATTLEGENI_VESSEL_TYPE_RAND = "rand"
+SEATTLECLEARINGHOUSE_VESSEL_TYPE_WAN = "wan"
+SEATTLECLEARINGHOUSE_VESSEL_TYPE_LAN = "lan"
+SEATTLECLEARINGHOUSE_VESSEL_TYPE_NAT = "nat"
+SEATTLECLEARINGHOUSE_VESSEL_TYPE_RAND = "rand"
 
 # Some of these vessel status explanations are from:
 # https://seattle.cs.washington.edu/wiki/NodeManagerDesign
@@ -1601,9 +1601,9 @@ def _get_seattlegeni_client(identity):
     client = _call_seattlegeni_func(seattleclearinghouse_xmlrpc.SeattleClearinghouseClient,
                                     identity['username'],
                                     private_key_string=private_key_string,
-                                    xmlrpc_url=SEATTLEGENI_XMLRPC_URL,
-                                    allow_ssl_insecure=SEATTLEGENI_ALLOW_SSL_INSECURE,
-                                    ca_certs_file=SEATTLEGENI_CA_CERTS_FILES)
+                                    xmlrpc_url=SEATTLECLEARINGHOUSE_XMLRPC_URL,
+                                    allow_ssl_insecure=SEATTLECLEARINGHOUSE_ALLOW_SSL_INSECURE,
+                                    ca_certs_file=SEATTLECLEARINGHOUSE_CA_CERTS_FILES)
     identity["seattlegeniclient"] = client
     
   return identity["seattlegeniclient"]
@@ -1639,7 +1639,7 @@ def seattlegeni_acquire_vessels(identity, vesseltype, number):
       The identity to use for communicating with SeattleGENI.
     vesseltype
       The type of vessels to be acquired. This must be one of the constants
-      named SEATTLEGENI_VESSEL_TYPE_*
+      named SEATTLECLEARINGHOUSE_VESSEL_TYPE_*
     number
       The number of vessels to be acquired.
   <Exceptions>

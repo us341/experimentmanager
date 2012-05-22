@@ -23,12 +23,12 @@ import experimentlib
 
 # Whether to allow insecure ssl when communicating with seattlegeni.
 # True, False, or None (None indicates to use the default)
-experimentlib.SEATTLEGENI_ALLOW_SSL_INSECURE = None
+experimentlib.SEATTLECLEARINGHOUSE_ALLOW_SSL_INSECURE = None
 
 # If using secure ssl communication with seattlegeni, then this is the path
 # to the CA certs file. See the file seattleclearinghouse_xmlrpc.py for details.
 # This should be a path to the pem file or None (None indicates to use the default)
-experimentlib.SEATTLEGENI_CA_CERTS_FILES = None
+experimentlib.SEATTLECLEARINGHOUSE_CA_CERTS_FILES = None
 
 # The seattlegeni username will be derived from the filename.
 PUBLICKEY_FILENAME = "/path/to/your.publickey"
@@ -114,7 +114,7 @@ def main():
     else:
       print("Will try to acquire " + str(num_vessels_to_request) + " vessels.")
 
-    vessel_type = experimentlib.SEATTLEGENI_VESSEL_TYPE_WAN
+    vessel_type = experimentlib.SEATTLECLEARINGHOUSE_VESSEL_TYPE_WAN
     acquired_vessels = experimentlib.seattlegeni_acquire_vessels(identity, vessel_type, num_vessels_to_request)
     
     print("Acquired " + str(num_vessels_to_request) + " vessels: " + str(acquired_vessels))
