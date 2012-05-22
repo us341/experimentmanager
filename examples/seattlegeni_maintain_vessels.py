@@ -91,7 +91,7 @@ def main():
             str(vesselhandles_to_release))
       try:
         experimentlib.seattlegeni_release_vessels(identity, vesselhandles_to_release)
-      except experimentlib.SeattleGENIError, e:
+      except experimentlib.SeattleClearinghouseError, e:
         print("Failed to release vessels: " + str(e))
       else:
         print("Vessels successfully released.")
@@ -119,7 +119,7 @@ def main():
     
     print("Acquired " + str(num_vessels_to_request) + " vessels: " + str(acquired_vessels))
 
-  except experimentlib.SeattleGENIError, e:
+  except experimentlib.SeattleClearinghouseError, e:
     # This isn't very useful error handling, but is here to demonstrate catching
     # errors raised by the seattlegeni_* functions of the experimentlib.
     print("An error occurred with a request to SeattleGENI: " + str(e))

@@ -82,16 +82,16 @@
   
     All exceptions raised by functions in this module will either be or extend:
       * SeattleExperimentError
-      * SeattleGENIError
+      * SeattleClearinghouseError
       
-    The SeattleGENIError* exceptions will only be raised by the functions whose
+    The SeattleClearinghouseError* exceptions will only be raised by the functions whose
     names are seattlegeni_*. Any of the seattlegeni_* functions may raise the
     following in addition to specific exceptions described in the function
-    docstrings (these are all subclasses of SeattleGENIError):
-      * SeattleGENICommunicationError
-      * SeattleGENIAuthenticationError
-      * SeattleGENIInvalidRequestError
-      * SeattleGENIInternalError
+    docstrings (these are all subclasses of SeattleClearinghouseError):
+      * SeattleClearinghouseCommunicationError
+      * SeattleClearinghouseAuthenticationError
+      * SeattleClearinghouseInvalidRequestError
+      * SeattleClearinghouseInternalError
       
     In the case of invalid arguments to functions, the following may be
     raised (these will not always be documented for each function):
@@ -271,16 +271,16 @@ class IdentityInformationMissingError(SeattleExperimentError):
 #This is the base class for all SeattleGENI errors. We make this available
 #in the namespace of the experimentlib so that clients do not have to import
 #seattleclearinghouse_xmlrpc to catch these.
-SeattleGENIError = seattleclearinghouse_xmlrpc.SeattleGENIError
+SeattleClearinghouseError = seattleclearinghouse_xmlrpc.SeattleClearinghouseError
 
 # We make these available, as well, in case users find them useful. We prefix
 # all of these error names with SeattleGENI.
-SeattleGENICommunicationError = seattleclearinghouse_xmlrpc.CommunicationError
-SeattleGENIInternalError = seattleclearinghouse_xmlrpc.InternalError
-SeattleGENIAuthenticationError = seattleclearinghouse_xmlrpc.AuthenticationError
-SeattleGENIInvalidRequestError = seattleclearinghouse_xmlrpc.InvalidRequestError
-SeattleGENINotEnoughCreditsError = seattleclearinghouse_xmlrpc.NotEnoughCreditsError
-SeattleGENIUnableToAcquireResourcesError = seattleclearinghouse_xmlrpc.UnableToAcquireResourcesError
+SeattleClearinghouseCommunicationError = seattleclearinghouse_xmlrpc.CommunicationError
+SeattleClearinghouseInternalError = seattleclearinghouse_xmlrpc.InternalError
+SeattleClearinghouseAuthenticationError = seattleclearinghouse_xmlrpc.AuthenticationError
+SeattleClearinghouseInvalidRequestError = seattleclearinghouse_xmlrpc.InvalidRequestError
+SeattleClearinghouseNotEnoughCreditsError = seattleclearinghouse_xmlrpc.NotEnoughCreditsError
+SeattleClearinghouseUnableToAcquireResourcesError = seattleclearinghouse_xmlrpc.UnableToAcquireResourcesError
 
 
 
@@ -1572,7 +1572,7 @@ def get_nodeid(nodelocation):
 def _call_seattlegeni_func(func, *args, **kwargs):
   """
   Helper function to limit the potential errors raised by seattlegeni_*
-  functions to SeattleGENIError or classes that extend it. The seattleclearinghouse_xmlrpc
+  functions to SeattleClearinghouseError or classes that extend it. The seattleclearinghouse_xmlrpc
   module doesn't catch ProtocolError or unexpected xmlrpc faults. At the level
   of the experimentlib, though, we just consider these generic failures for the
   purpose of simlifying error handling when using the experimentlib.
@@ -1580,10 +1580,10 @@ def _call_seattlegeni_func(func, *args, **kwargs):
   try:
     return func(*args, **kwargs)
   except xmlrpclib.ProtocolError:
-    raise SeattleGENIError("Failed to communicate with SeattleGENI. " +
+    raise SeattleClearinghouseError("Failed to communicate with SeattleGENI. " +
                            "Are you using the correct xmlrpc url? " + traceback.format_exc())
   except xmlrpclib.Fault:
-    raise SeattleGENIError("Unexpected XML-RPC fault when talking to SeattleGENI. " +
+    raise SeattleClearinghouseError("Unexpected XML-RPC fault when talking to SeattleGENI. " +
                            "Are you using a current version of experimentlib.py and " +
                            "seattleclearinghouse_xmlrpc.py? " + traceback.format_exc())
 
@@ -1644,7 +1644,7 @@ def seattlegeni_acquire_vessels(identity, vesseltype, number):
       The number of vessels to be acquired.
   <Exceptions>
     The common SeattleGENI exceptions described in the module comments, as well as:
-    SeattleGENINotEnoughCreditsError
+    SeattleClearinghouseNotEnoughCreditsError
       If the account does not have enough available vessel credits to fulfill
       the request.
   <Side Effects>
@@ -1677,7 +1677,7 @@ def seattlegeni_acquire_specific_vessels(identity, vesselhandle_list):
       vessels the account has available to acquire.
   <Exceptions>
     The common SeattleGENI exceptions described in the module comments, as well as:
-    SeattleGENINotEnoughCreditsError
+    SeattleClearinghouseNotEnoughCreditsError
       If the account does not have enough available vessel credits to fulfill
       the request.
   <Side Effects>
