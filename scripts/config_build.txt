@@ -1,0 +1,13 @@
+experimentmanager/*
+clearinghouse/*
+portability/*
+repy_v2/*
+seattlelib_v2/*
+nodemanager/*
+dist/LICENSE.TXT
+# Tests
+test repy_v2/tests/*
+test repy_v2/testsV2/*
+test nodemanager/tests/*
+test portability/tests/*
+test seattlelib_v2/tests/*

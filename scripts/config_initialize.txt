@@ -1,0 +1,7 @@
+experimentmanager
+clearinghouse
+portability
+repy_v2
+seattlelib_v2
+nodemanager
+dist -b git-aware-buildscripts
