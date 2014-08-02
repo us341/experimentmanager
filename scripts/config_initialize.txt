@@ -2,6 +2,7 @@ experimentmanager
 clearinghouse
 portability
 repy_v2
+repy_v1
 seattlelib_v2
 nodemanager
 dist -b new_build_v1
