@@ -4,6 +4,7 @@ portability/*
 repy_v2/*
 seattlelib_v2/*
 nodemanager/*
+utf/*
 dist/LICENSE.TXT
 # Tests
 test repy_v2/tests/*
