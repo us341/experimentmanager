@@ -3,7 +3,7 @@
 ../DEPENDENCIES/repy_v2/*
 ../DEPENDENCIES/seattlelib_v2/*
 ../DEPENDENCIES/nodemanager/*
-common/*
-common/utf/*
+../DEPENDENCIES/common/*
+../DEPENDENCIES/common/utf/*
 # Tests
 test ../tests/*
