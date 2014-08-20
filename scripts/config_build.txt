@@ -1,9 +1,9 @@
 ../*
-../DEPENDENCIES/portability/*
-../DEPENDENCIES/repy_v2/*
-../DEPENDENCIES/seattlelib_v2/*
-../DEPENDENCIES/nodemanager/*
-../DEPENDENCIES/common/*
-../DEPENDENCIES/common/utf/*
+portability/*
+repy_v2/*
+seattlelib_v2/*
+nodemanager/*
+common/*
+common/utf/*
 # Tests
 test ../tests/*
