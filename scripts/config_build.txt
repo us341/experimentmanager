@@ -1,13 +1,9 @@
-experimentmanager/*
-clearinghouse/*
-portability/*
-repy_v2/*
-seattlelib_v2/*
-nodemanager/*
-utf/*
-dist/LICENSE.TXT
+../*
+../DEPENDENCIES/portability/*
+../DEPENDENCIES/repy_v2/*
+../DEPENDENCIES/seattlelib_v2/*
+../DEPENDENCIES/nodemanager/*
+common/*
+common/utf/*
 # Tests
-test repy_v2/testsV2/*
-test nodemanager/tests/*
-test portability/tests/*
-test seattlelib_v2/tests/*
+test ../tests/*
